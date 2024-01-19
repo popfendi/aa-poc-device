@@ -12,6 +12,7 @@ import (
 	"github.com/pion/mediadevices"
 	"github.com/pion/mediadevices/pkg/codec/opus"
 	_ "github.com/pion/mediadevices/pkg/driver/microphone"
+	"github.com/pion/mediadevices/pkg/prop"
 	"github.com/pion/webrtc/v3"
 )
 
@@ -185,7 +186,9 @@ func handleStartCall(c *websocket.Conn, deviceID string, clientID string) *webrt
 
 	// Get the audio source (for example, a microphone)
 	audioSource, err := mediadevices.GetUserMedia(mediadevices.MediaStreamConstraints{
-		Audio: func(c *mediadevices.MediaTrackConstraints) {},
+		Audio: func(c *mediadevices.MediaTrackConstraints) {
+			c.DeviceID = prop.String(os.Getenv("LINUX_MIC_ID"))
+		},
 		Codec: codecSelector,
 	})
 	if err != nil {
