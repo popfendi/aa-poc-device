@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"math"
 	"os"
 	"os/signal"
 	"strconv"
@@ -39,13 +40,61 @@ func analyze(dataChannel chan<- []byte) {
 		}
 
 		// Calculate power spectral density
-		psd, _ := spectral.Pwelch(data, sampleRate, &spectral.PwelchOptions{NFFT: fftSize})
+		psd, freqs := spectral.Pwelch(data, sampleRate, &spectral.PwelchOptions{NFFT: fftSize})
+
+		// Define the frequency bands
+		frequencyBands := []float64{20, 25, 31.5, 40, 50, 63, 80, 100, 125, 160, 200, 250, 315, 400, 500, 630, 800, 1000, 1250, 1500, 2000, 2500, 3150, 4000, 5000, 6300, 8000, 12000, 16000, 20000, 22000, 22050}
+
+		// Initialize variables to store band information
+
+		bandEnd := 0
+		bandMaxDB := -math.Inf(1) // Initialize to negative infinity
+
+		obj := make(map[string]float64)
+
+		// Iterate through the PSD and frequency values
+		for i, p := range psd {
+			freq := freqs[i]
+			db := 10 * math.Log10(p)
+
+			// Check if the current frequency is within the current band
+			if freq <= frequencyBands[bandEnd] {
+				// Update the maximum DB value if the current DB is greater
+				if db > bandMaxDB {
+					bandMaxDB = db
+
+				}
+			} else {
+				// Store the maximum DB value for the previous band
+				if bandMaxDB > -math.Inf(1) {
+					obj[strconv.FormatFloat(frequencyBands[bandEnd], 'f', -1, 64)] = bandMaxDB
+				}
+
+				// Update the band indices
+				bandEnd++
+
+				// Reset the maximum DB value
+				bandMaxDB = -math.Inf(1)
+
+				// Check if the current frequency is within the new band
+				if freq <= frequencyBands[bandEnd] {
+					// Update the maximum DB value
+					bandMaxDB = db
+
+				}
+			}
+		}
+
+		// Store the maximum DB value for the last band
+		if bandMaxDB > -math.Inf(1) {
+			obj[strconv.FormatFloat(frequencyBands[bandEnd], 'f', -1, 64)] = bandMaxDB
+		}
 
 		output := make(map[string]interface{})
 
 		ts := strconv.FormatInt(time.Now().UnixMilli(), 10)
 
-		output["spectrum"] = psd
+		output["spectrum"] = obj
 		output["ts"] = ts
 
 		// Convert output to JSON
