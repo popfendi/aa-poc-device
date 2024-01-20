@@ -139,13 +139,12 @@ func messageHandler(message []byte) {
 		}
 
 		peerConnection = handleStartCall(conn, deviceID, msg.ClientID)
-		gatherCandidates(peerConnection, conn, deviceID, msg.ClientID)
-
 	case "endCall":
 		handleEndCall(peerConnection)
 
 	case "sdpAnswer":
 		handleSDPAnswer(peerConnection, msg.Data)
+		gatherCandidates(peerConnection, conn, deviceID, msg.ClientID)
 
 	case "receiveIceCandidate":
 		handleICECandidate(peerConnection, msg.Data)
@@ -185,7 +184,8 @@ func handleStartCall(c *websocket.Conn, deviceID string, clientID string) *webrt
 
 	// Get the audio source (for example, a microphone)
 	audioSource, err := mediadevices.GetUserMedia(mediadevices.MediaStreamConstraints{
-		Audio: func(c *mediadevices.MediaTrackConstraints) {},
+		Audio: func(c *mediadevices.MediaTrackConstraints) {
+		},
 		Codec: codecSelector,
 	})
 	if err != nil {

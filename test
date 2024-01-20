@@ -1,0 +1,13 @@
+pcm.!default {
+    type plug
+    slave.pcm "dsnooper"
+}
+
+pcm.dsnooper {
+    type dsnoop
+    ipc_key 1025
+    slave {
+        pcm "hw:2,0"  # Use your specific card and device number
+        channels 1   # Adjust depending on your microphone's capabilities
+    }
+}
