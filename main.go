@@ -21,6 +21,7 @@ var addr = flag.String("addr", os.Getenv("SERVER_ADDRESS"), "http service addres
 var conn *websocket.Conn
 var deviceID = os.Getenv("DEVICE_ID")
 var peerConnection *webrtc.PeerConnection
+var candidateQueue []webrtc.ICECandidateInit
 
 var (
 	connectionOpen bool
@@ -146,6 +147,8 @@ func messageHandler(message []byte) {
 
 	case "sdpAnswer":
 		handleSDPAnswer(peerConnection, msg.Data)
+		// Now send the queued candidates
+		sendQueuedCandidates(conn, deviceID, msg.ClientID)
 
 	case "receiveIceCandidate":
 		handleICECandidate(peerConnection, msg.Data)
@@ -182,7 +185,7 @@ func handleStartCall(c *websocket.Conn, deviceID string, clientID string) *webrt
 	peerConnection.OnICEConnectionStateChange(func(connectionState webrtc.ICEConnectionState) {
 		Sugar.Infof("Connection State has changed %s", connectionState.String())
 	})
-	gatherCandidates(peerConnection, conn, deviceID, clientID)
+	gatherCandidates(peerConnection)
 
 	// Get the audio source (for example, a microphone)
 	audioSource, err := mediadevices.GetUserMedia(mediadevices.MediaStreamConstraints{
@@ -244,15 +247,21 @@ func handleStartCall(c *websocket.Conn, deviceID string, clientID string) *webrt
 	return peerConnection
 }
 
-func gatherCandidates(peerConnection *webrtc.PeerConnection, c *websocket.Conn, deviceID string, clientID string) {
+func gatherCandidates(peerConnection *webrtc.PeerConnection) {
 	peerConnection.OnICECandidate(func(candidate *webrtc.ICECandidate) {
 		if candidate == nil {
 			// All candidates gathered, possibly send a message to signal this
 			return
 		}
-		// Serialize the candidate
-		candidateJSON, _ := json.Marshal(candidate.ToJSON())
-		// Wrap the candidate in the agreed message format
+
+		// Add candidate to the queue
+		candidateQueue = append(candidateQueue, candidate.ToJSON())
+	})
+}
+
+func sendQueuedCandidates(c *websocket.Conn, deviceID, clientID string) {
+	for _, candidate := range candidateQueue {
+		candidateJSON, _ := json.Marshal(candidate)
 		msg := Message{
 			DeviceID: deviceID,
 			ClientID: clientID,
@@ -265,7 +274,10 @@ func gatherCandidates(peerConnection *webrtc.PeerConnection, c *websocket.Conn, 
 		if err != nil {
 			Sugar.Errorf("Failed to send candidate message: %s", err.Error())
 		}
-	})
+	}
+
+	// Clear the queue
+	candidateQueue = nil
 }
 
 func handleEndCall(peerConnection *webrtc.PeerConnection) {
