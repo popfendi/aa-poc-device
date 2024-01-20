@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"flag"
+	"fmt"
 	"net/url"
 	"os"
 	"sync"
@@ -122,7 +123,7 @@ func connectAndHandleMessages() error {
 			return err
 		}
 		// Process message
-		messageHandler(message)
+		go messageHandler(message)
 	}
 }
 
@@ -135,17 +136,16 @@ func messageHandler(message []byte) {
 
 	switch msg.Action {
 	case "startCall":
+		fmt.Println("startcall")
 		if peerConnection != nil {
 			handleEndCall(peerConnection)
 		}
-
 		peerConnection = handleStartCall(conn, deviceID, msg.ClientID)
 	case "endCall":
 		handleEndCall(peerConnection)
 
 	case "sdpAnswer":
 		handleSDPAnswer(peerConnection, msg.Data)
-		gatherCandidates(peerConnection, conn, deviceID, msg.ClientID)
 
 	case "receiveIceCandidate":
 		handleICECandidate(peerConnection, msg.Data)
@@ -182,6 +182,7 @@ func handleStartCall(c *websocket.Conn, deviceID string, clientID string) *webrt
 	peerConnection.OnICEConnectionStateChange(func(connectionState webrtc.ICEConnectionState) {
 		Sugar.Infof("Connection State has changed %s", connectionState.String())
 	})
+	gatherCandidates(peerConnection, conn, deviceID, clientID)
 
 	// Get the audio source (for example, a microphone)
 	audioSource, err := mediadevices.GetUserMedia(mediadevices.MediaStreamConstraints{
@@ -249,10 +250,8 @@ func gatherCandidates(peerConnection *webrtc.PeerConnection, c *websocket.Conn, 
 			// All candidates gathered, possibly send a message to signal this
 			return
 		}
-
 		// Serialize the candidate
 		candidateJSON, _ := json.Marshal(candidate.ToJSON())
-
 		// Wrap the candidate in the agreed message format
 		msg := Message{
 			DeviceID: deviceID,
