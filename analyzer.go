@@ -16,6 +16,10 @@ import (
 var buffer []float32
 var mu sync.Mutex
 
+var (
+	offset float64 = 100.0
+)
+
 func analyze(dataChannel chan<- []byte) {
 	processAudio := func(in []float32) {
 		mu.Lock()
@@ -67,7 +71,7 @@ func analyze(dataChannel chan<- []byte) {
 			} else {
 				// Store the maximum DB value for the previous band
 				if bandMaxDB > -math.Inf(1) {
-					obj[strconv.FormatFloat(frequencyBands[bandEnd], 'f', -1, 64)] = bandMaxDB
+					obj[strconv.FormatFloat(frequencyBands[bandEnd], 'f', -1, 64)] = convertToCalibratedDB(bandMaxDB, offset)
 				}
 
 				// Update the band indices
@@ -87,7 +91,7 @@ func analyze(dataChannel chan<- []byte) {
 
 		// Store the maximum DB value for the last band
 		if bandMaxDB > -math.Inf(1) {
-			obj[strconv.FormatFloat(frequencyBands[bandEnd], 'f', -1, 64)] = bandMaxDB
+			obj[strconv.FormatFloat(frequencyBands[bandEnd], 'f', -1, 64)] = convertToCalibratedDB(bandMaxDB, offset)
 		}
 
 		output := make(map[string]interface{})
@@ -135,4 +139,8 @@ func analyze(dataChannel chan<- []byte) {
 	<-sig
 
 	Sugar.Info("Exiting with code 1")
+}
+
+func convertToCalibratedDB(dBFSValue float64, calibrationOffset float64) float64 {
+	return calibrationOffset - dBFSValue
 }
