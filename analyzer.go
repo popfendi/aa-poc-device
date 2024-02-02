@@ -47,7 +47,7 @@ func analyze(dataChannel chan<- []byte) {
 		psd, freqs := spectral.Pwelch(data, sampleRate, &spectral.PwelchOptions{NFFT: fftSize})
 
 		// Define the frequency bands
-		frequencyBands := []float64{20, 25, 31.5, 40, 50, 63, 80, 100, 125, 160, 200, 250, 315, 400, 500, 630, 800, 1000, 1250, 1500, 2000, 2500, 3150, 4000, 5000, 6300, 8000, 12000, 16000, 20000, 22000, 22050}
+		frequencyBands := []float64{20, 25, 30, 31.5, 35, 40, 45, 50, 55, 63, 70, 80, 90, 100, 110, 125, 140, 160, 180, 200, 225, 250, 280, 315, 360, 400, 450, 500, 565, 630, 715, 800, 900, 1000, 1125, 1250, 1375, 1500, 1750, 2000, 2250, 2500, 2825, 3150, 3575, 4000, 4500, 5000, 5650, 6300, 7150, 8000, 10000, 12000, 14000, 16000, 18000, 20000, 22000}
 
 		// Initialize variables to store band information
 
