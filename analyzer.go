@@ -20,7 +20,27 @@ var (
 	offset float64 = 100.0
 )
 
+func parseOffset() {
+	// Assuming you have an environment variable named "MY_FLOAT_VAR"
+	env := os.Getenv("DB_OFFSET")
+	if env == "" {
+		Sugar.Errorf("Environment variable DB_OFFSET is not set, defaulting to %f", offset)
+		return
+	}
+
+	// Convert the environment variable to float64
+	floatValue, err := strconv.ParseFloat(env, 64)
+	if err != nil {
+		Sugar.Errorf("Error converting %s to float64: %v\n", env, err)
+		return
+	}
+
+	offset = floatValue
+	Sugar.Infof("dB offset set to %f\n", floatValue)
+}
+
 func analyze(dataChannel chan<- []byte) {
+	parseOffset()
 	processAudio := func(in []float32) {
 		mu.Lock()
 		defer mu.Unlock()
