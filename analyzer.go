@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"math"
 	"os"
 	"os/signal"
@@ -67,10 +68,9 @@ func analyze(dataChannel chan<- []byte) {
 		psd, freqs := spectral.Pwelch(data, sampleRate, &spectral.PwelchOptions{NFFT: fftSize})
 
 		// Define the frequency bands
-		frequencyBands := []float64{20, 25, 30, 31.5, 35, 40, 45, 50, 55, 63, 70, 80, 90, 100, 110, 125, 140, 160, 180, 200, 225, 250, 280, 315, 360, 400, 450, 500, 565, 630, 715, 800, 900, 1000, 1125, 1250, 1375, 1500, 1750, 2000, 2250, 2500, 2825, 3150, 3575, 4000, 4500, 5000, 5650, 6300, 7150, 8000, 10000, 12000, 14000, 16000, 18000, 20000, 22000}
+		frequencyBands := []float64{20, 25, 30, 31.5, 35, 40, 45, 50, 55, 63, 70, 80, 90, 100, 110, 125, 140, 160, 180, 200, 225, 250, 280, 315, 360, 400, 450, 500, 565, 630, 715, 800, 900, 1000, 1125, 1250, 1375, 1500, 1750, 2000, 2250, 2500, 2825, 3150, 3575, 4000, 4500, 5000, 5650, 6300, 7150, 8000, 10000, 12000, 14000, 16000, 18000, 20000, 22050}
 
 		// Initialize variables to store band information
-
 		bandEnd := 0
 		bandMaxDB := -math.Inf(1) // Initialize to negative infinity
 
@@ -91,7 +91,8 @@ func analyze(dataChannel chan<- []byte) {
 			} else {
 				// Store the maximum DB value for the previous band
 				if bandMaxDB > -math.Inf(1) {
-					obj[strconv.FormatFloat(frequencyBands[bandEnd], 'f', -1, 64)] = convertToCalibratedDB(bandMaxDB, offset)
+					level := applyAWeightingFilter(bandMaxDB, frequencyBands[bandEnd])
+					obj[strconv.FormatFloat(frequencyBands[bandEnd], 'f', -1, 64)] = convertToCalibratedDB(level, offset)
 				}
 
 				// Update the band indices
@@ -111,7 +112,8 @@ func analyze(dataChannel chan<- []byte) {
 
 		// Store the maximum DB value for the last band
 		if bandMaxDB > -math.Inf(1) {
-			obj[strconv.FormatFloat(frequencyBands[bandEnd], 'f', -1, 64)] = convertToCalibratedDB(bandMaxDB, offset)
+			level := applyAWeightingFilter(bandMaxDB, frequencyBands[bandEnd])
+			obj[strconv.FormatFloat(frequencyBands[bandEnd], 'f', -1, 64)] = convertToCalibratedDB(level, offset)
 		}
 
 		output := make(map[string]interface{})
@@ -127,6 +129,9 @@ func analyze(dataChannel chan<- []byte) {
 			Sugar.Errorf("Error converting output to JSON: %s", err.Error())
 			return
 		}
+
+		fmt.Println()
+		fmt.Println(obj)
 
 		dataChannel <- jsonOutput
 
@@ -162,5 +167,20 @@ func analyze(dataChannel chan<- []byte) {
 }
 
 func convertToCalibratedDB(dBFSValue float64, calibrationOffset float64) float64 {
-	return calibrationOffset - dBFSValue
+	return -calibrationOffset - dBFSValue
+}
+
+// Calculate the A-weighting for a given frequency
+func aWeighting(f float64) float64 {
+	fSquared := f * f
+	numerator := 12200.0 * 12200.0 * fSquared * fSquared
+	denominator := (fSquared + 20.6*20.6) * math.Sqrt((fSquared+107.7*107.7)*(fSquared+737.9*737.9)) * (fSquared + 12200.0*12200.0)
+	r := numerator / denominator
+	aWeighted := 20.0*math.Log10(r) + 2.0
+	return aWeighted
+}
+
+// Apply the A-weighting filter to a dB value at a given frequency
+func applyAWeightingFilter(db float64, freq float64) float64 {
+	return db + aWeighting(freq)
 }
