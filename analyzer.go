@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"math"
 	"os"
 	"os/signal"
@@ -18,7 +17,7 @@ var buffer []float32
 var mu sync.Mutex
 
 var (
-	offset float64 = 100.0
+	offset float64 = 10.0
 )
 
 func parseOffset() {
@@ -58,6 +57,11 @@ func analyze(dataChannel chan<- []byte) {
 			return
 		}
 
+		rms := calculateRMS(in)
+		p := calculatePeak(in)
+		spl := convertRMSToSPL(rms, 0.00002, offset) // Reference pressure in air (Pascal)
+		peak := convertRMSToSPL(p, 0.00002, offset)
+
 		// Convert to float64 for spectral analysis
 		data := make([]float64, len(buffer))
 		for i, v := range buffer {
@@ -91,8 +95,7 @@ func analyze(dataChannel chan<- []byte) {
 			} else {
 				// Store the maximum DB value for the previous band
 				if bandMaxDB > -math.Inf(1) {
-					level := applyAWeightingFilter(bandMaxDB, frequencyBands[bandEnd])
-					obj[strconv.FormatFloat(frequencyBands[bandEnd], 'f', -1, 64)] = convertToCalibratedDB(level, offset)
+					obj[strconv.FormatFloat(frequencyBands[bandEnd], 'f', -1, 64)] = bandMaxDB
 				}
 
 				// Update the band indices
@@ -112,8 +115,7 @@ func analyze(dataChannel chan<- []byte) {
 
 		// Store the maximum DB value for the last band
 		if bandMaxDB > -math.Inf(1) {
-			level := applyAWeightingFilter(bandMaxDB, frequencyBands[bandEnd])
-			obj[strconv.FormatFloat(frequencyBands[bandEnd], 'f', -1, 64)] = convertToCalibratedDB(level, offset)
+			obj[strconv.FormatFloat(frequencyBands[bandEnd], 'f', -1, 64)] = bandMaxDB
 		}
 
 		output := make(map[string]interface{})
@@ -121,6 +123,8 @@ func analyze(dataChannel chan<- []byte) {
 		ts := strconv.FormatInt(time.Now().UnixMilli(), 10)
 
 		output["spectrum"] = obj
+		output["db_avg"] = spl
+		output["db_peak"] = peak
 		output["ts"] = ts
 
 		// Convert output to JSON
@@ -129,9 +133,6 @@ func analyze(dataChannel chan<- []byte) {
 			Sugar.Errorf("Error converting output to JSON: %s", err.Error())
 			return
 		}
-
-		fmt.Println()
-		fmt.Println(obj)
 
 		dataChannel <- jsonOutput
 
@@ -166,21 +167,27 @@ func analyze(dataChannel chan<- []byte) {
 	Sugar.Info("Exiting with code 1")
 }
 
-func convertToCalibratedDB(dBFSValue float64, calibrationOffset float64) float64 {
-	return -calibrationOffset - dBFSValue
+func calculateRMS(buffer []float32) float64 {
+	var sum float64
+	for _, sample := range buffer {
+		sum += float64(sample) * float64(sample)
+	}
+	rms := math.Sqrt(sum / float64(len(buffer)))
+	return rms
 }
 
-// Calculate the A-weighting for a given frequency
-func aWeighting(f float64) float64 {
-	fSquared := f * f
-	numerator := 12200.0 * 12200.0 * fSquared * fSquared
-	denominator := (fSquared + 20.6*20.6) * math.Sqrt((fSquared+107.7*107.7)*(fSquared+737.9*737.9)) * (fSquared + 12200.0*12200.0)
-	r := numerator / denominator
-	aWeighted := 20.0*math.Log10(r) + 2.0
-	return aWeighted
+func calculatePeak(buffer []float32) float64 {
+	peak := 0.0
+	for _, sample := range buffer {
+		absSample := math.Abs(float64(sample))
+		if absSample > peak {
+			peak = absSample
+		}
+	}
+	return peak
 }
 
-// Apply the A-weighting filter to a dB value at a given frequency
-func applyAWeightingFilter(db float64, freq float64) float64 {
-	return db + aWeighting(freq)
+func convertRMSToSPL(rms, referenceValue, calibrationConstant float64) float64 {
+	// Add a calibration constant to adjust the SPL calculation for accuracy
+	return 20*math.Log10(rms/referenceValue) + calibrationConstant
 }
