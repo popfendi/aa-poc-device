@@ -120,7 +120,7 @@ func analyze(dataChannel chan<- []byte) {
 
 		output := make(map[string]interface{})
 
-		ts := strconv.FormatInt(time.Now().UnixMilli(), 10)
+		ts := time.Now().UnixMilli()
 
 		output["spectrum"] = obj
 		output["db_avg"] = spl
